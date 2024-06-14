@@ -4,12 +4,13 @@ from lianjia_chengjiao.items import HouseItem
 from lianjia_chengjiao.itemloader import HouseLoader
 from lianjia_chengjiao.login import Login
 import re
+import os
 
 class ChengjiaoSpider(scrapy.Spider):
     name = 'chengjiao'
-    allowed_domains = ['m.lianjia.com']
+    allowed_domains = ['m.lianjia.com','image1.ljcdn.com']
     start_urls = ['https://m.lianjia.com/sh/chengjiao/pg1']
-
+    cnt = 1
     def start_requests(self):
         with Login() as login:
             self.cookies = login.get_cookies()  # 获取登录后的cookies
@@ -17,9 +18,7 @@ class ChengjiaoSpider(scrapy.Spider):
                 yield scrapy.Request(url, cookies=self.cookies, callback=self.parse)
 
     def parse(self, response):
-
         script_content = response.xpath('//script[contains(., "__PRELOADED_STATE__")]/text()').get()
-
         preloaded_state_pattern = re.compile(r'window\.__PRELOADED_STATE__\s*=\s*({.*?});', re.DOTALL)
         preloaded_state_match = preloaded_state_pattern.search(script_content)
 
@@ -41,23 +40,23 @@ class ChengjiaoSpider(scrapy.Spider):
                 yield scrapy.Request(next_page_url, cookies=self.cookies, callback=self.parse)
 
     def parse_house(self, response):
-        l = HouseLoader(HouseItem(), response=response)
+        l = HouseLoader(item=HouseItem(), response=response)
         l.add_value('url', response.url)
         l.add_xpath('title', '//title/text()')
 
         pictext_div = response.xpath('//div[@class="sub_mod_box house_model post_ulog"]//div[@class="pictext flexbox"]')
         if pictext_div:
-            total_area=0.0
+            total_area = 0.0
             # 提取 data-frame 属性的值
             data_frame = pictext_div.xpath('./@data-frame').get()
             data_frame_json = json.loads(data_frame)
             for data in data_frame_json:
-                total_area+=float(data["area"])
+                total_area += float(data["area"])
             total_area = round(total_area, 2)
             l.add_value('data_frame', data_frame_json)
             l.add_value('totalArea', total_area)
             l.add_xpath('areaInTitle', '//h3[@class="house_desc"]/text()')
-            l.add_xpath('transactionPrice','//h3[@class="similar_data"]/div/p[@class="red big"]/span[@data-mark="price"]/text()')
+            l.add_xpath('transactionPrice', '//h3[@class="similar_data"]/div/p[@class="red big"]/span[@data-mark="price"]/text()')
             l.add_xpath('unitPrice', '//div[@class="similar_data_detail"]/p[@class="red big"][2]/text()')
             l.add_xpath('source', '//ul[@class="house_description big lightblack"]/li[@class="short"][1]/text()')
             l.add_xpath('transactionTime', '//ul[@class="house_description big lightblack"]/li[@class="short"][2]/text()')
@@ -71,7 +70,7 @@ class ChengjiaoSpider(scrapy.Spider):
             l.add_xpath('ownership', '//ul[@class="house_description big lightblack"]/li[@class="short"][10]/text()')
             l.add_xpath('community', '//ul[@class="house_description big lightblack"]/li[@class="long  arrow "][1]/a/text()')
 
-            l.add_xpath('houseType','//ul[@class="info_ul"][1]/li[@class="info_li"][1]/p[@class="info_content deep_gray"]/text()')
+            l.add_xpath('houseType', '//ul[@class="info_ul"][1]/li[@class="info_li"][1]/p[@class="info_content deep_gray"]/text()')
             l.add_xpath('InnerArea', '//ul[@class="info_ul"][1]/li[@class="info_li"][2]/p[@class="info_content deep_gray"]/text()')
             l.add_xpath('houseStructure', '//ul[@class="info_ul"][1]/li[@class="info_li"][3]/p[@class="info_content deep_gray"]/text()')
             l.add_xpath('ratioOfElevatorResidents', '//ul[@class="info_ul"][1]/li[@class="info_li"][4]/p[@class="info_content deep_gray"]/text()')
@@ -82,4 +81,28 @@ class ChengjiaoSpider(scrapy.Spider):
             l.add_xpath('houseAge', '//ul[@class="info_ul"][2]/li[@class="info_li"][1]/p[@class="info_content deep_gray"]/text()')
             l.add_xpath('housingProposes', '//ul[@class="info_ul"][2]/li[@class="info_li"][2]/p[@class="info_content deep_gray"]/text()')
             l.add_xpath('lianjiaId', '//ul[@class="info_ul"][2]/li[@class="info_li"][3]/p[@class="info_content deep_gray"]/text()')
-        yield l.load_item()
+            image_url = response.xpath('//img[@class="lazyload"][1]/@origin-src').get()
+            print(image_url)
+            if image_url:
+                image_dir = "./images"
+                os.makedirs(image_dir, exist_ok=True)
+                img_name = f'image_{self.cnt}.jpg'  # 或者根据需要生成其他的图片名称
+                img_path = os.path.join(image_dir, img_name)
+                self.cnt += 1
+                print(img_path)
+                yield scrapy.Request(url=image_url, callback=self.save_image, meta={'img_path': img_path, 'loader': l})
+                print("continue")
+            print("request结束")
+            yield l.load_item()
+
+    def save_image(self, response):
+        print("进入save")
+        img_path = response.meta['img_path']
+        loader = response.meta['loader']
+
+        with open(img_path, 'wb') as f:
+            print("开始写入")
+            f.write(response.body)
+
+        loader.add_value('img_path', img_path)
+        yield loader.load_item()

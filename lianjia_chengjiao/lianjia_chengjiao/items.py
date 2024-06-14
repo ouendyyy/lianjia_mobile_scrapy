@@ -34,3 +34,4 @@ class HouseItem(scrapy.Item):
     houseAge =  scrapy.Field()                  #房屋年限
     housingProposes =  scrapy.Field()           #房屋用途
     lianjiaId =  scrapy.Field()                 #链家编号
+    img_path = scrapy.Field()
