@@ -10,7 +10,6 @@ class ChengjiaoSpider(scrapy.Spider):
     name = 'chengjiao'
     allowed_domains = ['m.lianjia.com','image1.ljcdn.com']
     start_urls = ['https://m.lianjia.com/sh/chengjiao/pg1']
-    cnt = 1
     def start_requests(self):
         with Login() as login:
             self.cookies = login.get_cookies()  # 获取登录后的cookies
@@ -80,29 +79,21 @@ class ChengjiaoSpider(scrapy.Spider):
 
             l.add_xpath('houseAge', '//ul[@class="info_ul"][2]/li[@class="info_li"][1]/p[@class="info_content deep_gray"]/text()')
             l.add_xpath('housingProposes', '//ul[@class="info_ul"][2]/li[@class="info_li"][2]/p[@class="info_content deep_gray"]/text()')
-            l.add_xpath('lianjiaId', '//ul[@class="info_ul"][2]/li[@class="info_li"][3]/p[@class="info_content deep_gray"]/text()')
+            l.add_xpath('lianjiaId', '//ul[@class="info_ul"][2]/li[@class="info_li"][5]/p[@class="info_content deep_gray"]/text()')
             image_url = response.xpath('//img[@class="lazyload"][1]/@origin-src').get()
-            print(image_url)
+            lianjiaId = response.xpath('//ul[@class="info_ul"][2]/li[@class="info_li"][5]/p[@class="info_content deep_gray"]/text()').get()
             if image_url:
                 image_dir = "./images"
                 os.makedirs(image_dir, exist_ok=True)
-                img_name = f'image_{self.cnt}.jpg'  # 或者根据需要生成其他的图片名称
+                img_name = f'{lianjiaId}.jpg'  # 或者根据需要生成其他的图片名称
                 img_path = os.path.join(image_dir, img_name)
-                self.cnt += 1
-                print(img_path)
                 yield scrapy.Request(url=image_url, callback=self.save_image, meta={'img_path': img_path, 'loader': l})
-                print("continue")
-            print("request结束")
             yield l.load_item()
 
     def save_image(self, response):
-        print("进入save")
         img_path = response.meta['img_path']
         loader = response.meta['loader']
-
         with open(img_path, 'wb') as f:
-            print("开始写入")
             f.write(response.body)
-
         loader.add_value('img_path', img_path)
         yield loader.load_item()
